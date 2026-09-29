@@ -36,6 +36,13 @@ export interface DirectDrawCompatibility {
    * This enlarges guest COM surface objects and must never apply to games without explicit opt-in.
    */
   readonly guestSurfaceFastPath?: boolean;
+  /**
+   * Candidate display modes reported by EnumDisplayModes, so the game's Video
+   * settings menu offers a resolution list instead of only the current mode.
+   * Each mode must be satisfiable by SetDisplayMode (see its bounds). Absent
+   * or empty, the layer reports only the current display mode.
+   */
+  readonly displayModeCandidates?: readonly { width: number; height: number }[];
 }
 
 export interface DirectPlayCompatibility {

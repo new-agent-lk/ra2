@@ -36,7 +36,9 @@ describe('RA2/YR 分辨率 INI 内存覆盖', () => {
     );
     expect(patched).toBe('[Options]\nGameSpeed=1\n\n[Video]\nAllowHiResModes=yes\nScreenWidth=1920\nScreenHeight=1080');
     expect(parseGameResolution('1440x900')).toEqual({ width: 1440, height: 900 });
-    expect(parseGameResolution('1366x768')).toBeNull();
+    expect(parseGameResolution('1366x768')).toEqual({ width: 1366, height: 768 });
+    expect(parseGameResolution('1920x1200')).toEqual({ width: 1920, height: 1200 });
+    expect(parseGameResolution('2560x1440')).toEqual({ width: 2560, height: 1440 });
     expect(parseGameResolution('99999x1')).toBeNull();
   });
 

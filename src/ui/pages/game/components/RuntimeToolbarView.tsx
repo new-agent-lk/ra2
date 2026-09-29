@@ -62,7 +62,7 @@ export interface ToolbarModel {
   reshadeMode?: ReShadeMode;
   mapsAvailable: boolean;
 }
-const resolutions = ['', '800x600', '1024x768', '1280x720', '1280x800', '1440x900', '1600x900', '1920x1080'];
+const resolutions = ['', '800x600', '1024x768', '1280x720', '1280x800', '1366x768', '1440x900', '1600x900', '1920x1080', '1920x1200', '2560x1440'];
 const errorText = (error: unknown) => localizeText(error instanceof Error ? error.message : String(error));
 function CheatContent({ game, callbacks }: { game: CheatGuideGameId | null; callbacks: RuntimeToolbarCallbacks }) {
   const [status, setStatus] = useState(t('页面只报告已交给 VM，不代表游戏接受。'));

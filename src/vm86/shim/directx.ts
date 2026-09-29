@@ -1,6 +1,6 @@
 import type { PaletteState, SoundBufferState, SurfaceState, Win32Call, Win32Result } from '../win32';
 import { DEFAULT_PCM_FORMAT, parsePcmWaveFormatEx, type PcmWaveFormat } from '../audio';
-import { HYPERCALL_ACTIVE_SHELL_SURFACE, makeConstantImportStub, makeImportStub, type PeImport } from '../pe';
+import { HYPERCALL_ACTIVE_SHELL_SURFACE, HYPERCALL_CALLBACK_RESULT, makeConstantImportStub, makeImportStub, type PeImport } from '../pe';
 import { win32ModuleOf } from './text';
 import { withWinmm } from './winmm';
 import type { Constructor } from './state';
@@ -425,27 +425,25 @@ export function withDirectx<TBase extends Constructor<WinmmChain>>(Base: TBase) 
           case 'EnumDisplayModes': {
             const callback = a[4] ?? 0;
             if (!callback) return { eax: 0x8000_4003 };
-            // Each suspended callback keeps its own mode snapshot, including across nested mode changes.
-            // Slot ownership releases the descriptor with the bridge, without allocating permanent heap data.
-            const frame = this.reserveGuestCallback(108); // sizeof(DDSURFACEDESC)
-            const desc = frame.scratchAddress;
-            this.writeSurfaceDesc(desc, {
-              object: 0,
-              width: this.displayWidth,
-              height: this.displayHeight,
-              pitch: (this.displayWidth * (this.displayBpp >>> 3) + 3) & ~3,
-              bpp: this.displayBpp,
-              pixels: 0,
-              caps: 0x200,
-              palette: 0,
-              attached: 0,
-              sourceColorKey: null,
-              destinationColorKey: null,
-              textRuns: [],
-              lastDrawSerial: 0,
-              dirty: false,
-            });
+            // RA2's Video menu builds its resolution list from this enumeration, so report every
+            // profile-registered candidate mode instead of only the current one. When no candidates
+            // are registered, fall back to the current mode so behavior matches the previous
+            // single-mode implementation. Descriptors live in the reusable callback slot's scratch
+            // tail (one contiguous run), so repeated enumeration reclaims them with the bridge and
+            // never allocates permanent heap staging.
+            const candidates = this.gameProfile.directDraw?.displayModeCandidates;
+            const modes =
+              candidates && candidates.length > 0
+                ? candidates
+                : [{ width: this.displayWidth || 800, height: this.displayHeight || 600 }];
+            const bpp = this.displayBpp === 16 ? 16 : 8;
             const originalReturn = this.readU32(call.stack);
+            const descBytes = 108; // sizeof(DDSURFACEDESC)
+            const frame = this.reserveGuestCallback(descBytes * modes.length);
+            const descBase = frame.scratchAddress;
+            modes.forEach((mode, index) => {
+              this.writeSurfaceDesc(descBase + index * descBytes, this.makeDisplayModeSurface(mode.width, mode.height, bpp));
+            });
             const code: number[] = [];
             const emit32 = (value: number) =>
               code.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, value >>> 24);
@@ -454,12 +452,18 @@ export function withDirectx<TBase extends Constructor<WinmmChain>>(Base: TBase) 
               emit32(value);
             };
             code.push(0x55, 0x89, 0xe5); // push ebp; mov ebp,esp
-            push(a[3] ?? 0);
-            push(desc);
-            code.push(0xb8);
-            emit32(callback);
-            code.push(0xff, 0xd0); // callback(&DDSURFACEDESC, context)
-            code.push(0x89, 0xec, 0x5d); // mov esp,ebp; pop ebp accommodates stdcall/cdecl cleanup differences.
+            for (let index = 0; index < modes.length; index++) {
+              // stdcall/cdecl: callback(lpDDSurfaceDesc, lpContext); push context first, then desc.
+              push(a[3] ?? 0);
+              push(descBase + index * descBytes);
+              code.push(0xb8);
+              emit32(callback);
+              code.push(0xff, 0xd0); // call eax
+              code.push(0x89, 0xec); // mov esp,ebp
+              code.push(0xa3);
+              emit32(HYPERCALL_CALLBACK_RESULT); // mov [result], eax
+            }
+            code.push(0x5d); // pop ebp
             code.push(0x31, 0xc0); // DD_OK
             this.appendGuestCallbackReturn(code, frame, originalReturn);
             this.memory.write_memory(code, frame.trampoline);
@@ -1160,6 +1164,25 @@ export function withDirectx<TBase extends Constructor<WinmmChain>>(Base: TBase) 
         this.writeU32(object + SURFACE_UNLOCK_BUDGET, 0); // The first Unlock must enter the host.
       }
       return surface;
+    }
+    /** Build a descriptor-only surface state describing a display mode, for EnumDisplayModes/GetDisplayMode. */
+    protected makeDisplayModeSurface(width: number, height: number, bpp: number): SurfaceState {
+      return {
+        object: 0,
+        width,
+        height,
+        pitch: (width * (bpp >>> 3) + 3) & ~3,
+        bpp,
+        pixels: 0,
+        caps: 0x200,
+        palette: 0,
+        attached: 0,
+        sourceColorKey: null,
+        destinationColorKey: null,
+        textRuns: [],
+        lastDrawSerial: 0,
+        dirty: false,
+      };
     }
     /**
      * 108-byte DDSURFACEDESC staging plus a reused DataView: Lock/GetDisplayMode run tens of thousands of times per second. Replace 13 write_blob calls with one to avoid intermediate states and allocations.

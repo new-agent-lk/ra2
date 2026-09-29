@@ -1,4 +1,5 @@
 import type { GameShimProfile } from '../../vm86/shim/gameProfile';
+import { GAME_RESOLUTIONS } from '../resolution';
 
 /** RA2/XWIS-specific compatibility capabilities; unlisted behavior never enters the shared shim. */
 export const RA2_SHIM_PROFILE: GameShimProfile = Object.freeze({
@@ -20,7 +21,10 @@ export const RA2_SHIM_PROFILE: GameShimProfile = Object.freeze({
       badgeControlIdRange: Object.freeze([1770, 1772] as const),
     }),
   }),
-  directDraw: Object.freeze({ guestSurfaceFastPath: true }),
+  directDraw: Object.freeze({
+    guestSurfaceFastPath: true,
+    displayModeCandidates: GAME_RESOLUTIONS,
+  }),
   directPlay: Object.freeze({
     // Disassembly at 0x447790: the enumeration callback immediately returns FALSE when flags bit0 is set. The SDK defines
     // bit0 as enumeration timeout with opposite semantics; follow actual guest behavior and always pass 0.
