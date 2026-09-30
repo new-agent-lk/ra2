@@ -168,6 +168,8 @@ export function ShortcutHelp({ close }: { close(): void }) {
     ['[ / ]', t('时钟倍率 慢 / 快')],
     ['`', t('开发调试面板')],
     ['?', t('本帮助')],
+    ['Alt + ← / → / Home', t('阻止浏览器后退 / 前进')],
+    [t('鼠标侧键（后退 / 前进）'), t('阻止浏览器导航')],
   ];
   return (
     <section className="panel" style={panelStyle}>

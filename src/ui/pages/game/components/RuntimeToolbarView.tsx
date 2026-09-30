@@ -11,7 +11,7 @@ import { Modal } from './Modal';
 import { PerformanceDiagnostics } from './PerformanceDiagnostics';
 import { GameSelect } from './GameSelect';
 import type { UpscaleMode } from '../vmFrameRenderer';
-import { controlsCollapsed } from '../state/uiState';
+import { controlsCollapsed, helpVisible } from '../state/uiState';
 import { DEFAULT_VOLUME_PERCENT } from '../../../../adapter/audio';
 import { useStore } from '../../../shared/state/useStore';
 import { isDesktopEdge, showEdgeMouseNotice } from './edgeMouseNotice';
@@ -62,7 +62,19 @@ export interface ToolbarModel {
   reshadeMode?: ReShadeMode;
   mapsAvailable: boolean;
 }
-const resolutions = ['', '800x600', '1024x768', '1280x720', '1280x800', '1366x768', '1440x900', '1600x900', '1920x1080', '1920x1200', '2560x1440'];
+const resolutions = [
+  '',
+  '800x600',
+  '1024x768',
+  '1280x720',
+  '1280x800',
+  '1366x768',
+  '1440x900',
+  '1600x900',
+  '1920x1080',
+  '1920x1200',
+  '2560x1440',
+];
 const errorText = (error: unknown) => localizeText(error instanceof Error ? error.message : String(error));
 function CheatContent({ game, callbacks }: { game: CheatGuideGameId | null; callbacks: RuntimeToolbarCallbacks }) {
   const [status, setStatus] = useState(t('页面只报告已交给 VM，不代表游戏接受。'));
@@ -475,6 +487,9 @@ export function RuntimeToolbarView({
           Edge 提醒
         </button>
       )}
+      <button id="vm-shortcut-help" className="toolbar-button" type="button" onClick={() => helpVisible.set(true)}>
+        {t('快捷键')}
+      </button>
       <button
         id="vm-fullscreen"
         className="toolbar-button"
