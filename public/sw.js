@@ -7,7 +7,10 @@
  * - Players import game files locally and store them in browser IndexedDB; these bypass the SW.
  * - The development server (localhost:15174) does not register this worker, avoiding conflicts with its no-cache policy.
  */
-const APP_SHELL = 'ra2vm-app-v1';
+// Injected at build time (vite.config.ts swVersionPlugin). Every deploy gets a fresh cache
+// namespace, so the activate step below can drop all previous builds' caches.
+const BUILD_VERSION = '__BUILD_VERSION__';
+const APP_SHELL = `ra2vm-app-${BUILD_VERSION}`;
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -16,6 +19,8 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      // A new build activates with a fresh APP_SHELL namespace; every other cache (including
+      // previous builds) is stale after a deploy and can be discarded in full.
       const keys = await caches.keys();
       await Promise.all(keys.filter((key) => key !== APP_SHELL).map((key) => caches.delete(key)));
       await self.clients.claim();

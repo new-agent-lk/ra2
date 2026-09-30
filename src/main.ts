@@ -16,10 +16,17 @@ installNavigationGuard();
 // PWA: register the service worker in production for browser installation eligibility; skip development
 // to avoid conflicting with no-cache/manual-refresh policies. Register after load to avoid competing with initial startup resources.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error) => {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+      // A deploy ships a new worker (per-build version stamp in sw.js). When it takes over, the
+      // old page may still reference deleted hashed chunks, so reload to the fresh build exactly once.
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
+      }
+    } catch (error) {
       console.warn('[PWA] 服务线程注册失败', error);
-    });
+    }
   });
 }
 

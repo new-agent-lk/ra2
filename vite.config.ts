@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -25,6 +25,56 @@ function gameAssetsPlugin(): Plugin {
     },
     configurePreviewServer(server) {
       server.middlewares.use('/game', serveGameAsset);
+    },
+  };
+}
+
+/**
+ * Hashed build artifacts are immutable; after a redeploy old index.html files reference chunks that no
+ * longer exist. Vite's SPA fallback would answer those with index.html (200 text/html), which browsers
+ * then fail to parse as a dynamic module. Answer missing /assets files with a real 404 so stale pages
+ * surface a clear load error instead of a misleading HTML body.
+ */
+function missingAssets404Plugin(): Plugin {
+  return {
+    name: 'ra2:missing-assets-404',
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const urlPath = decodeURIComponent((req.url ?? '').split('?')[0]);
+        if (!urlPath.startsWith('/assets/')) {
+          next();
+          return;
+        }
+        try {
+          if (statSync(join(server.config.build.outDir, urlPath)).isFile()) {
+            next();
+            return;
+          }
+        } catch {
+          // Missing file: fall through to 404 below.
+        }
+        res.statusCode = 404;
+        res.end('not found');
+      });
+    },
+  };
+}
+
+/**
+ * Stamp a per-build version into dist/sw.js so the service worker's cache namespace changes on
+ * every deploy. The worker then discards all previous caches on activation, and the page reloads
+ * once the new worker takes over, preventing stale pages from importing deleted hashed chunks.
+ */
+function swVersionPlugin(): Plugin {
+  return {
+    name: 'ra2:sw-build-version',
+    apply: 'build',
+    closeBundle() {
+      const outDir = fileURLToPath(new URL('./dist', import.meta.url));
+      const swPath = join(outDir, 'sw.js');
+      const source = readFileSync(swPath, 'utf8');
+      const version = Date.now().toString(36);
+      writeFileSync(swPath, source.replace('__BUILD_VERSION__', version));
     },
   };
 }
@@ -174,7 +224,7 @@ function isWithinGameDirectory(candidate: string): boolean {
 }
 
 export default defineConfig({
-  plugins: [basicSsl(), gameAssetsPlugin(), ra2NetworkRelayPlugin()],
+  plugins: [basicSsl(), gameAssetsPlugin(), missingAssets404Plugin(), swVersionPlugin(), ra2NetworkRelayPlugin()],
   // VM pages with hmr=false cannot rely on reloads to handle a second prebundle. Register JSX and Worker dynamic dependencies
   // up front to avoid a second React instance in lazy pages. This only builds development caches; browser experiments are not preloaded.
   optimizeDeps: {
